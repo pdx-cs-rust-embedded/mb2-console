@@ -1,0 +1,21 @@
+[package]
+name = "mb2-console"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embedded-hal = "0.2"
+microbit-v2 = "0.13"
+nb = "1.1"
+
+[dependencies.cortex-m]
+version = "0.7"
+features = ["critical-section-single-core"]
+
+[dev-dependencies]
+cortex-m-rt = "0.7"
+panic-halt = "0.2"
+
+[features]
+default = ["panic_handler"]
+panic_handler = []
