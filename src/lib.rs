@@ -12,7 +12,7 @@ use microbit::{
 };
 
 use core::cell::RefCell;
-use cortex_m::interrupt::{CriticalSection, Mutex};
+use cortex_m::interrupt::{self, Mutex};
 pub use nb::{self};
 
 #[cfg(feature = "panic_handler")]
@@ -44,17 +44,19 @@ static mut CONSOLE: Mutex<RefCell<Option<ConsolePort>>> = Mutex::new(RefCell::ne
 
 fn with_maybe_console<F: FnOnce(&mut Option<ConsolePort>)>(f: F) {
     unsafe {
-        let cs = CriticalSection::new();
-        let mut maybe_port = CONSOLE.borrow(&cs).borrow_mut();
-        f(&mut maybe_port);
+        interrupt::free(|cs| {
+            let mut maybe_port = CONSOLE.borrow(cs).borrow_mut();
+            f(&mut maybe_port);
+        });
     }
 }
 
 pub fn with_console<F: FnOnce(&mut ConsolePort)>(f: F) {
     unsafe {
-        let cs = CriticalSection::new();
-        let mut port = CONSOLE.borrow(&cs).borrow_mut();
-        f(port.as_mut().unwrap());
+        interrupt::free(|cs| {
+            let mut port = CONSOLE.borrow(cs).borrow_mut();
+            f(port.as_mut().unwrap());
+        });
     }
 }
 
