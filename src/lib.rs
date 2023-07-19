@@ -15,9 +15,6 @@ use core::cell::RefCell;
 use cortex_m::interrupt::{self, Mutex};
 pub use nb::{self};
 
-#[cfg(feature = "panic_handler")]
-use core::sync::atomic::{compiler_fence, Ordering::SeqCst};
-
 #[macro_export]
 macro_rules! print {
     ($fmt:literal $(, $args:expr)* $(,)?) => {
@@ -129,6 +126,6 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         *maybe_port = None;
     });
     loop {
-        compiler_fence(SeqCst);
+        cortex_m::asm::wfi();
     }
 }
