@@ -11,14 +11,13 @@ use microbit::{
     },
 };
 
-use core::cell::RefCell;
-use cortex_m::interrupt::{self, Mutex};
+use critical_section_lock_mut::LockMut;
 pub use nb::{self};
 
 #[macro_export]
 macro_rules! print {
     ($fmt:literal $(, $args:expr)* $(,)?) => {
-        $crate::with_console(|console| {
+        $crate::CONSOLE.with_lock(|console| {
             use core::fmt::Write;
             use $crate::embedded_hal::prelude::_embedded_hal_serial_Write;
             write!(console, $fmt, $($args),*).unwrap();
@@ -37,36 +36,17 @@ macro_rules! println {
 
 pub type ConsolePort = UartePort<UARTE0>;
 
-static mut CONSOLE: Mutex<RefCell<Option<ConsolePort>>> = Mutex::new(RefCell::new(None));
-
-fn with_maybe_console<F: FnOnce(&mut Option<ConsolePort>)>(f: F) {
-    unsafe {
-        interrupt::free(|cs| {
-            let mut maybe_port = CONSOLE.borrow(cs).borrow_mut();
-            f(&mut maybe_port);
-        });
-    }
-}
-
-pub fn with_console<F: FnOnce(&mut ConsolePort)>(f: F) {
-    unsafe {
-        interrupt::free(|cs| {
-            let mut port = CONSOLE.borrow(cs).borrow_mut();
-            f(port.as_mut().unwrap());
-        });
-    }
-}
+pub static CONSOLE: LockMut<ConsolePort> = LockMut::new();
 
 pub fn init_serial(uarte0: UARTE0, uart: UartPins) {
-    with_maybe_console(|c| {
+    CONSOLE.init({
         let serial = uarte::Uarte::new(
             uarte0,
             uart.into(),
             Parity::EXCLUDED,
             Baudrate::BAUD115200,
         );
-        let port = UartePort::new(serial);
-        *c = Some(port);
+        UartePort::new(serial)
     });
 }
 
@@ -116,14 +96,11 @@ impl<T: Instance> serial::Read<u8> for UartePort<T> {
 #[inline(never)]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    with_maybe_console(|maybe_port| {
-        if let Some(console) = maybe_port {
-            use core::fmt::Write;
-            use embedded_hal::prelude::_embedded_hal_serial_Write;
-            write!(console, "{}\r\n", info).ok();
-            nb::block!(console.flush()).unwrap();
-        }
-        *maybe_port = None;
+    CONSOLE.try_with_lock(|console| {
+        use core::fmt::Write;
+        use embedded_hal::prelude::_embedded_hal_serial_Write;
+        write!(console, "{}\r\n", info).ok();
+        nb::block!(console.flush()).unwrap();
     });
     loop {
         cortex_m::asm::wfi();
